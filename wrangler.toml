@@ -1,0 +1,13 @@
+# Cloudflare Pages configuration
+name = "personal-progress-tracking"
+compatibility_date = "2024-12-01"
+pages_build_output_dir = "dist/personal-progress-tracking/browser"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "progress-tracking-db"
+database_id = "local" # Replace with actual ID after creating: npx wrangler d1 create progress-tracking-db
+
+[vars]
+# ADMIN_PASSWORD should be set via Cloudflare dashboard for production
+# For local dev, set in .dev.vars file
