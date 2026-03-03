@@ -184,23 +184,30 @@ type IssueSortOption = 'updated' | 'title' | 'priority' | 'status' | 'due_date';
           } @else {
             <div class="space-y-2 sm:space-y-3">
               @for (issue of filteredIssues(); track issue.id) {
-              <a
-                [routerLink]="['/admin/issues', issue.id]"
-                class="block rounded-lg bg-white p-3 shadow hover:shadow-md sm:p-4"
-              >
+              <div class="rounded-lg bg-white p-3 shadow hover:shadow-md sm:p-4">
                 <div class="flex items-start justify-between gap-2">
-                  <div class="min-w-0 flex-1">
-                    <h3 class="truncate text-sm font-medium text-gray-900 sm:text-base">{{ issue.title }}</h3>
+                  <a [routerLink]="['/admin/issues', issue.id]" class="min-w-0 flex-1">
+                    <h3 class="truncate text-sm font-medium text-gray-900 hover:text-blue-600 sm:text-base">{{ issue.title }}</h3>
                     @if (issue.description) {
                       <p class="mt-1 line-clamp-1 text-xs text-gray-500 sm:text-sm">{{ issue.description }}</p>
                     }
-                  </div>
+                  </a>
                   <div class="flex flex-shrink-0 items-center gap-1.5 sm:gap-2">
                     <app-priority-badge [priority]="issue.priority" />
-                    <app-status-badge [status]="issue.status" />
+                    <select
+                      [value]="issue.status"
+                      (change)="onQuickStatusChange(issue.id, $event)"
+                      (click)="$event.stopPropagation()"
+                      class="rounded-full border-0 py-0.5 pl-2 pr-6 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 sm:pr-7"
+                      [class]="getStatusSelectClass(issue.status)"
+                    >
+                      <option value="todo">To Do</option>
+                      <option value="in-progress">In Progress</option>
+                      <option value="done">Done</option>
+                    </select>
                   </div>
                 </div>
-              </a>
+              </div>
             }
             </div>
           }
@@ -388,6 +395,26 @@ export class ProjectDetailPage implements OnInit {
 
   protected onIssueFilterPriorityChange(event: Event): void {
     this.issueFilterPriority.set((event.target as HTMLSelectElement).value as IssuePriority | 'all');
+  }
+
+  protected onQuickStatusChange(issueId: string, event: Event): void {
+    const newStatus = (event.target as HTMLSelectElement).value as IssueStatus;
+    this.issueService.update(issueId, { status: newStatus }).subscribe({
+      next: () => {
+        this.issues.update((issues) =>
+          issues.map((i) => (i.id === issueId ? { ...i, status: newStatus } : i))
+        );
+      },
+    });
+  }
+
+  protected getStatusSelectClass(status: IssueStatus): string {
+    const classes: Record<IssueStatus, string> = {
+      todo: 'bg-gray-100 text-gray-800',
+      'in-progress': 'bg-yellow-100 text-yellow-800',
+      done: 'bg-green-100 text-green-800',
+    };
+    return classes[status];
   }
 
   protected copyShareLink(): void {
