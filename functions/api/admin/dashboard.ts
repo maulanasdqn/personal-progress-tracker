@@ -7,12 +7,13 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   try {
     const { DB } = context.env;
 
-    // Get project counts
-    const projectStats = await query<{ total: number; active: number }>(
+    // Get project counts and estimated revenue
+    const projectStats = await query<{ total: number; active: number; estimated_revenue: number }>(
       DB,
       `SELECT
         COUNT(*) as total,
-        SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active
+        SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active,
+        COALESCE(SUM(CASE WHEN status = 'active' THEN budget ELSE 0 END), 0) as estimated_revenue
       FROM projects`
     );
 
@@ -42,6 +43,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       total_issues: issueStats[0]?.total ?? 0,
       completed_issues: issueStats[0]?.completed ?? 0,
       in_progress_issues: issueStats[0]?.in_progress ?? 0,
+      estimated_revenue: projectStats[0]?.estimated_revenue ?? 0,
       recent_projects: recentProjects,
     };
 
