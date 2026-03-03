@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, inject, signal, OnInit } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject, signal, OnInit, computed } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { DatePipe } from '@angular/common';
@@ -11,6 +11,8 @@ import {
   CardComponent,
 } from '../../../../shared/components';
 import type { Project, CreateProjectDto, ProjectStatus } from '../../../../models';
+
+type SortOption = 'name' | 'updated' | 'deadline' | 'status';
 
 @Component({
   selector: 'app-projects-page',
@@ -27,12 +29,12 @@ import type { Project, CreateProjectDto, ProjectStatus } from '../../../../model
   ],
   template: `
     <div>
-      <div class="mb-6 flex items-center justify-between">
-        <h1 class="text-2xl font-bold text-gray-900">Projects</h1>
+      <div class="mb-4 flex items-center justify-between sm:mb-6">
+        <h1 class="text-xl font-bold text-gray-900 sm:text-2xl">Projects</h1>
         <button
           type="button"
           (click)="openCreateDialog()"
-          class="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          class="rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 sm:px-4"
         >
           New Project
         </button>
@@ -56,26 +58,74 @@ import type { Project, CreateProjectDto, ProjectStatus } from '../../../../model
           </app-empty-state>
         </app-card>
       } @else {
-        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          @for (project of projects(); track project.id) {
+        <!-- Search, Sort, Filter -->
+        <div class="mb-4 space-y-3 sm:mb-6">
+          <div class="relative">
+            <input
+              type="text"
+              placeholder="Search projects..."
+              [value]="searchQuery()"
+              (input)="onSearchChange($event)"
+              class="block w-full rounded-md border border-gray-300 py-2.5 pl-10 pr-3 text-sm placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+            <svg class="pointer-events-none absolute left-3 top-3 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <div class="grid grid-cols-2 gap-2 sm:flex sm:gap-3">
+            <select
+              [value]="filterStatus()"
+              (change)="onFilterChange($event)"
+              class="w-full rounded-md border border-gray-300 py-2.5 pl-3 pr-8 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:w-auto"
+            >
+              <option value="all">All Status</option>
+              <option value="active">Active</option>
+              <option value="on-hold">On Hold</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+            <select
+              [value]="sortBy()"
+              (change)="onSortChange($event)"
+              class="w-full rounded-md border border-gray-300 py-2.5 pl-3 pr-8 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:w-auto"
+            >
+              <option value="updated">Recent</option>
+              <option value="name">Name</option>
+              <option value="deadline">Deadline</option>
+              <option value="status">Status</option>
+            </select>
+          </div>
+        </div>
+
+        @if (filteredProjects().length === 0) {
+          <app-card>
+            <app-empty-state
+              title="No matching projects"
+              description="Try adjusting your search or filter criteria."
+            />
+          </app-card>
+        } @else {
+          <div class="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
+            @for (project of filteredProjects(); track project.id) {
             <a
               [routerLink]="['/admin/projects', project.id]"
-              class="block rounded-lg bg-white p-6 shadow transition-shadow hover:shadow-md"
+              class="block rounded-lg bg-white p-4 shadow transition-shadow hover:shadow-md sm:p-6"
             >
-              <div class="mb-2 flex items-start justify-between">
-                <h2 class="text-lg font-medium text-gray-900">{{ project.name }}</h2>
+              <div class="mb-2 flex items-start justify-between gap-2">
+                <h2 class="text-base font-medium text-gray-900 sm:text-lg">{{ project.name }}</h2>
                 <app-status-badge [status]="project.status" />
               </div>
               @if (project.description) {
                 <p class="mb-3 line-clamp-2 text-sm text-gray-500">{{ project.description }}</p>
               }
-              <div class="flex items-center justify-between text-sm text-gray-500">
-                <span>{{ project.client_name ?? 'No client' }}</span>
-                <span>{{ project.updated_at | date: 'MMM d' }}</span>
+              <div class="flex items-center justify-between text-xs text-gray-500 sm:text-sm">
+                <span class="truncate">{{ project.client_name ?? 'No client' }}</span>
+                <span class="ml-2 flex-shrink-0">{{ project.updated_at | date: 'MMM d' }}</span>
               </div>
             </a>
           }
-        </div>
+          </div>
+        }
       }
 
       <!-- Create/Edit Dialog -->
@@ -113,7 +163,7 @@ import type { Project, CreateProjectDto, ProjectStatus } from '../../../../model
                 <option value="cancelled">Cancelled</option>
               </select>
             </div>
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid gap-4 sm:grid-cols-2">
               <div>
                 <label for="client_name" class="mb-1 block text-sm font-medium text-gray-700">Client Name</label>
                 <input
@@ -133,7 +183,7 @@ import type { Project, CreateProjectDto, ProjectStatus } from '../../../../model
                 />
               </div>
             </div>
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid gap-4 sm:grid-cols-2">
               <div>
                 <label for="budget" class="mb-1 block text-sm font-medium text-gray-700">Budget</label>
                 <input
@@ -186,6 +236,53 @@ export class ProjectsPage implements OnInit {
   protected readonly dialogOpen = signal(false);
   protected readonly editingProject = signal<Project | null>(null);
 
+  // Search, sort, filter
+  protected readonly searchQuery = signal('');
+  protected readonly sortBy = signal<SortOption>('updated');
+  protected readonly filterStatus = signal<ProjectStatus | 'all'>('all');
+
+  protected readonly filteredProjects = computed(() => {
+    let result = this.projects();
+
+    // Filter by status
+    const status = this.filterStatus();
+    if (status !== 'all') {
+      result = result.filter((p) => p.status === status);
+    }
+
+    // Search
+    const query = this.searchQuery().toLowerCase().trim();
+    if (query) {
+      result = result.filter(
+        (p) =>
+          p.name.toLowerCase().includes(query) ||
+          p.description?.toLowerCase().includes(query) ||
+          p.client_name?.toLowerCase().includes(query)
+      );
+    }
+
+    // Sort
+    const sort = this.sortBy();
+    result = [...result].sort((a, b) => {
+      switch (sort) {
+        case 'name':
+          return a.name.localeCompare(b.name);
+        case 'deadline':
+          if (!a.deadline && !b.deadline) return 0;
+          if (!a.deadline) return 1;
+          if (!b.deadline) return -1;
+          return a.deadline.localeCompare(b.deadline);
+        case 'status':
+          return a.status.localeCompare(b.status);
+        case 'updated':
+        default:
+          return b.updated_at.localeCompare(a.updated_at);
+      }
+    });
+
+    return result;
+  });
+
   protected readonly form = this.fb.nonNullable.group({
     name: ['', Validators.required],
     description: [''],
@@ -198,6 +295,18 @@ export class ProjectsPage implements OnInit {
 
   ngOnInit(): void {
     this.loadProjects();
+  }
+
+  protected onSearchChange(event: Event): void {
+    this.searchQuery.set((event.target as HTMLInputElement).value);
+  }
+
+  protected onSortChange(event: Event): void {
+    this.sortBy.set((event.target as HTMLSelectElement).value as SortOption);
+  }
+
+  protected onFilterChange(event: Event): void {
+    this.filterStatus.set((event.target as HTMLSelectElement).value as ProjectStatus | 'all');
   }
 
   protected openCreateDialog(): void {

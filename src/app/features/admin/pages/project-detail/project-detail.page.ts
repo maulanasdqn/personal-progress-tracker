@@ -4,6 +4,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { DatePipe } from '@angular/common';
 import { ProjectService } from '../../services/project.service';
 import { IssueService } from '../../services/issue.service';
+import { RupiahPipe } from '../../../../shared/pipes/rupiah.pipe';
 import {
   LoadingSpinnerComponent,
   EmptyStateComponent,
@@ -14,6 +15,8 @@ import {
 } from '../../../../shared/components';
 import type { Project, Issue, CreateIssueDto, IssueStatus, IssuePriority } from '../../../../models';
 
+type IssueSortOption = 'updated' | 'title' | 'priority' | 'status' | 'due_date';
+
 @Component({
   selector: 'app-project-detail-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -21,6 +24,7 @@ import type { Project, Issue, CreateIssueDto, IssueStatus, IssuePriority } from 
     RouterLink,
     ReactiveFormsModule,
     DatePipe,
+    RupiahPipe,
     LoadingSpinnerComponent,
     EmptyStateComponent,
     StatusBadgeComponent,
@@ -34,24 +38,24 @@ import type { Project, Issue, CreateIssueDto, IssueStatus, IssuePriority } from 
         <app-loading-spinner />
       } @else if (project()) {
         <!-- Header -->
-        <div class="mb-6">
+        <div class="mb-4 sm:mb-6">
           <div class="flex items-center gap-2 text-sm text-gray-500">
             <a routerLink="/admin/projects" class="hover:text-gray-700">Projects</a>
             <span>/</span>
-            <span>{{ project()!.name }}</span>
+            <span class="truncate">{{ project()!.name }}</span>
           </div>
-          <div class="mt-2 flex items-center justify-between">
-            <div class="flex items-center gap-3">
-              <h1 class="text-2xl font-bold text-gray-900">{{ project()!.name }}</h1>
+          <div class="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div class="flex items-center gap-2 sm:gap-3">
+              <h1 class="text-xl font-bold text-gray-900 sm:text-2xl">{{ project()!.name }}</h1>
               <app-status-badge [status]="project()!.status" />
             </div>
             <div class="flex gap-2">
               <button
                 type="button"
                 (click)="copyShareLink()"
-                class="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                class="flex-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 sm:flex-none"
               >
-                {{ copied() ? 'Copied!' : 'Copy Share Link' }}
+                {{ copied() ? 'Copied!' : 'Share' }}
               </button>
               <button
                 type="button"
@@ -65,24 +69,24 @@ import type { Project, Issue, CreateIssueDto, IssueStatus, IssuePriority } from 
         </div>
 
         <!-- Project Info -->
-        <app-card containerClass="mb-6">
-          <div class="grid grid-cols-2 gap-6 sm:grid-cols-4">
+        <app-card containerClass="mb-4 sm:mb-6">
+          <div class="grid grid-cols-2 gap-4 sm:grid-cols-4 sm:gap-6">
             <div>
-              <p class="text-sm font-medium text-gray-500">Client</p>
-              <p class="mt-1 text-sm text-gray-900">{{ project()!.client_name ?? 'Not set' }}</p>
+              <p class="text-xs font-medium text-gray-500 sm:text-sm">Client</p>
+              <p class="mt-1 truncate text-sm text-gray-900">{{ project()!.client_name ?? 'Not set' }}</p>
             </div>
             <div>
-              <p class="text-sm font-medium text-gray-500">Contact</p>
-              <p class="mt-1 text-sm text-gray-900">{{ project()!.client_contact ?? 'Not set' }}</p>
+              <p class="text-xs font-medium text-gray-500 sm:text-sm">Contact</p>
+              <p class="mt-1 truncate text-sm text-gray-900">{{ project()!.client_contact ?? 'Not set' }}</p>
             </div>
             <div>
-              <p class="text-sm font-medium text-gray-500">Budget</p>
-              <p class="mt-1 text-sm text-gray-900">
-                {{ project()!.budget ? '$' + project()!.budget : 'Not set' }}
+              <p class="text-xs font-medium text-gray-500 sm:text-sm">Budget</p>
+              <p class="mt-1 truncate text-sm text-gray-900">
+                {{ project()!.budget ? (project()!.budget | rupiah) : 'Not set' }}
               </p>
             </div>
             <div>
-              <p class="text-sm font-medium text-gray-500">Deadline</p>
+              <p class="text-xs font-medium text-gray-500 sm:text-sm">Deadline</p>
               <p class="mt-1 text-sm text-gray-900">
                 {{ project()!.deadline ? (project()!.deadline | date: 'MMM d, y') : 'Not set' }}
               </p>
@@ -90,15 +94,15 @@ import type { Project, Issue, CreateIssueDto, IssueStatus, IssuePriority } from 
           </div>
           @if (project()!.description) {
             <div class="mt-4 border-t pt-4">
-              <p class="text-sm font-medium text-gray-500">Description</p>
+              <p class="text-xs font-medium text-gray-500 sm:text-sm">Description</p>
               <p class="mt-1 text-sm text-gray-900">{{ project()!.description }}</p>
             </div>
           }
         </app-card>
 
         <!-- Issues -->
-        <div class="mb-4 flex items-center justify-between">
-          <h2 class="text-lg font-medium text-gray-900">Issues</h2>
+        <div class="mb-3 flex items-center justify-between sm:mb-4">
+          <h2 class="text-base font-medium text-gray-900 sm:text-lg">Issues</h2>
           <button
             type="button"
             (click)="openIssueDialog()"
@@ -121,25 +125,85 @@ import type { Project, Issue, CreateIssueDto, IssueStatus, IssuePriority } from 
             </app-empty-state>
           </app-card>
         } @else {
-          <div class="space-y-3">
-            @for (issue of issues(); track issue.id) {
+          <!-- Search, Sort, Filter -->
+          <div class="mb-3 space-y-3 sm:mb-4">
+            <div class="relative">
+              <input
+                type="text"
+                placeholder="Search issues..."
+                [value]="issueSearchQuery()"
+                (input)="onIssueSearchChange($event)"
+                class="block w-full rounded-md border border-gray-300 py-2.5 pl-10 pr-3 text-sm placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+              <svg class="pointer-events-none absolute left-3 top-3 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            <div class="grid grid-cols-3 gap-2 sm:flex sm:gap-2">
+              <select
+                [value]="issueFilterStatus()"
+                (change)="onIssueFilterStatusChange($event)"
+                class="w-full rounded-md border border-gray-300 py-2.5 pl-2 pr-6 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:w-auto sm:pl-3 sm:pr-8 sm:text-sm"
+              >
+                <option value="all">Status</option>
+                <option value="todo">To Do</option>
+                <option value="in-progress">Progress</option>
+                <option value="done">Done</option>
+              </select>
+              <select
+                [value]="issueFilterPriority()"
+                (change)="onIssueFilterPriorityChange($event)"
+                class="w-full rounded-md border border-gray-300 py-2.5 pl-2 pr-6 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:w-auto sm:pl-3 sm:pr-8 sm:text-sm"
+              >
+                <option value="all">Priority</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+              <select
+                [value]="issueSortBy()"
+                (change)="onIssueSortChange($event)"
+                class="w-full rounded-md border border-gray-300 py-2.5 pl-2 pr-6 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:w-auto sm:pl-3 sm:pr-8 sm:text-sm"
+              >
+                <option value="updated">Recent</option>
+                <option value="title">Title</option>
+                <option value="priority">Priority</option>
+                <option value="status">Status</option>
+                <option value="due_date">Due</option>
+              </select>
+            </div>
+          </div>
+
+          @if (filteredIssues().length === 0) {
+            <app-card>
+              <app-empty-state
+                title="No matching issues"
+                description="Try adjusting your search or filter criteria."
+              />
+            </app-card>
+          } @else {
+            <div class="space-y-2 sm:space-y-3">
+              @for (issue of filteredIssues(); track issue.id) {
               <a
                 [routerLink]="['/admin/issues', issue.id]"
-                class="flex items-center justify-between rounded-lg bg-white p-4 shadow hover:shadow-md"
+                class="block rounded-lg bg-white p-3 shadow hover:shadow-md sm:p-4"
               >
-                <div>
-                  <h3 class="font-medium text-gray-900">{{ issue.title }}</h3>
-                  @if (issue.description) {
-                    <p class="mt-1 line-clamp-1 text-sm text-gray-500">{{ issue.description }}</p>
-                  }
-                </div>
-                <div class="flex items-center gap-3">
-                  <app-priority-badge [priority]="issue.priority" />
-                  <app-status-badge [status]="issue.status" />
+                <div class="flex items-start justify-between gap-2">
+                  <div class="min-w-0 flex-1">
+                    <h3 class="truncate text-sm font-medium text-gray-900 sm:text-base">{{ issue.title }}</h3>
+                    @if (issue.description) {
+                      <p class="mt-1 line-clamp-1 text-xs text-gray-500 sm:text-sm">{{ issue.description }}</p>
+                    }
+                  </div>
+                  <div class="flex flex-shrink-0 items-center gap-1.5 sm:gap-2">
+                    <app-priority-badge [priority]="issue.priority" />
+                    <app-status-badge [status]="issue.status" />
+                  </div>
                 </div>
               </a>
             }
-          </div>
+            </div>
+          }
         }
 
         <!-- Issue Dialog -->
@@ -164,7 +228,7 @@ import type { Project, Issue, CreateIssueDto, IssueStatus, IssuePriority } from 
                   class="block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 ></textarea>
               </div>
-              <div class="grid grid-cols-2 gap-4">
+              <div class="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label for="issue_status" class="mb-1 block text-sm font-medium text-gray-700">Status</label>
                   <select
@@ -237,6 +301,64 @@ export class ProjectDetailPage implements OnInit {
   protected readonly issueDialogOpen = signal(false);
   protected readonly savingIssue = signal(false);
 
+  // Search, sort, filter for issues
+  protected readonly issueSearchQuery = signal('');
+  protected readonly issueSortBy = signal<IssueSortOption>('updated');
+  protected readonly issueFilterStatus = signal<IssueStatus | 'all'>('all');
+  protected readonly issueFilterPriority = signal<IssuePriority | 'all'>('all');
+
+  protected readonly filteredIssues = computed(() => {
+    let result = this.issues();
+
+    // Filter by status
+    const status = this.issueFilterStatus();
+    if (status !== 'all') {
+      result = result.filter((i) => i.status === status);
+    }
+
+    // Filter by priority
+    const priority = this.issueFilterPriority();
+    if (priority !== 'all') {
+      result = result.filter((i) => i.priority === priority);
+    }
+
+    // Search
+    const query = this.issueSearchQuery().toLowerCase().trim();
+    if (query) {
+      result = result.filter(
+        (i) =>
+          i.title.toLowerCase().includes(query) ||
+          i.description?.toLowerCase().includes(query)
+      );
+    }
+
+    // Sort
+    const sort = this.issueSortBy();
+    const priorityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
+    const statusOrder: Record<string, number> = { todo: 0, 'in-progress': 1, done: 2 };
+
+    result = [...result].sort((a, b) => {
+      switch (sort) {
+        case 'title':
+          return a.title.localeCompare(b.title);
+        case 'priority':
+          return priorityOrder[a.priority] - priorityOrder[b.priority];
+        case 'status':
+          return statusOrder[a.status] - statusOrder[b.status];
+        case 'due_date':
+          if (!a.due_date && !b.due_date) return 0;
+          if (!a.due_date) return 1;
+          if (!b.due_date) return -1;
+          return a.due_date.localeCompare(b.due_date);
+        case 'updated':
+        default:
+          return b.updated_at.localeCompare(a.updated_at);
+      }
+    });
+
+    return result;
+  });
+
   protected readonly issueForm = this.fb.nonNullable.group({
     title: ['', Validators.required],
     description: [''],
@@ -250,6 +372,22 @@ export class ProjectDetailPage implements OnInit {
   ngOnInit(): void {
     this.projectId = this.route.snapshot.params['id'];
     this.loadData();
+  }
+
+  protected onIssueSearchChange(event: Event): void {
+    this.issueSearchQuery.set((event.target as HTMLInputElement).value);
+  }
+
+  protected onIssueSortChange(event: Event): void {
+    this.issueSortBy.set((event.target as HTMLSelectElement).value as IssueSortOption);
+  }
+
+  protected onIssueFilterStatusChange(event: Event): void {
+    this.issueFilterStatus.set((event.target as HTMLSelectElement).value as IssueStatus | 'all');
+  }
+
+  protected onIssueFilterPriorityChange(event: Event): void {
+    this.issueFilterPriority.set((event.target as HTMLSelectElement).value as IssuePriority | 'all');
   }
 
   protected copyShareLink(): void {
